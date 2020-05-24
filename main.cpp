@@ -40,7 +40,9 @@ atomic_bool ups_cmd_executed(false);
 // Global configs read from 'inverter.conf'
 
 string devicename;
+string server;
 int runinterval;
+int port;
 float ampfactor;
 float wattfactor;
 
@@ -84,6 +86,10 @@ void getSettingsFile(string filename) {
                     devicename = linepart2;
                 else if(linepart1 == "run_interval")
                     attemptAddSetting(&runinterval, linepart2);
+                else if(linepart1 == "port")
+                    attemptAddSetting(&port, linepart2);
+                else if(linepart1 == "server")
+                    server = linepart2;
                 else if(linepart1 == "amperage_factor")
                     attemptAddSetting(&ampfactor, linepart2);
                 else if(linepart1 == "watt_factor")
@@ -171,7 +177,7 @@ int main(int argc, char* argv[]) {
     }
 
     bool ups_status_changed(false);
-    ups = new cInverter(devicename);
+    ups = new cInverter(devicename,server,port);
 
     // Logic to send 'raw commands' to the inverter..
     if (!rawcmd.empty()) {

@@ -14,7 +14,9 @@ class cInverter {
     char status2[1024];
     char mode;
 
-    std::string device;
+        std::string device;
+        std::string server;
+    int port;
     std::mutex m;
 
     void SetMode(char newmode);
@@ -23,7 +25,7 @@ class cInverter {
     uint16_t cal_crc_half(uint8_t *pin, uint8_t len);
 
     public:
-        cInverter(std::string devicename);
+       cInverter(std::string devicename,std::string server, int port) ;
         void poll();
         void runMultiThread() {
             std::thread t1(&cInverter::poll, this);

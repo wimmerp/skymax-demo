@@ -5,12 +5,18 @@
 #include "inverter.h"
 #include "tools.h"
 #include "main.h"
-
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <fcntl.h>
 #include <termios.h>
+#define SA struct sockaddr
 
-cInverter::cInverter(std::string devicename) {
+cInverter::cInverter(std::string devicename,std::string servername, int portnumber) {
     device = devicename;
+    server =servername;
+    port=portnumber;
     status1[0] = 0;
     status2[0] = 0;
     warnings[0] = 0;
@@ -69,7 +75,34 @@ bool cInverter::query(const char *cmd, int replysize) {
     int fd;
     int i=0, n;
 
-    fd = open(this->device.data(), O_RDWR | O_NONBLOCK);
+    int sockfd, connfd;
+        struct sockaddr_in servaddr, cli;
+  bool isUdp=false;
+if(port>0)
+{
+  isUdp=true;
+        // socket create and varification
+        sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        if (sockfd == -1) {
+            printf("socket creation failed...\n");
+            return false;
+        }
+        bzero(&servaddr, sizeof(servaddr));
+
+        // assign IP, PORT
+        servaddr.sin_family = AF_INET;
+        servaddr.sin_addr.s_addr = inet_addr(server.c_str());
+        servaddr.sin_port = htons(port);
+        if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) {
+        lprintf("connection with the server failed.%s %d\n",server.c_str(),port);
+        return false;
+    }
+        fd= sockfd;
+      }
+      else
+      {
+        fd = open(this->device.data(), O_RDWR | O_NONBLOCK);
+      }
     if (fd == -1) {
         lprintf("INVERTER: Unable to open device file (errno=%d %s)", errno, strerror(errno));
         sleep(5);
@@ -103,12 +136,17 @@ bool cInverter::query(const char *cmd, int replysize) {
     memcpy(&buf, cmd, n);
     lprintf("INVERTER: Current CRC: %X %X", crc >> 8, crc & 0xff);
 
-    buf[n++] = crc >> 8;
-    buf[n++] = crc & 0xff;
-    buf[n++] = 0x0d;
 
     //send a command
     write(fd, &buf, n);
+
+        buf[0] = crc >> 8;
+        buf[1] = crc & 0xff;
+        buf[2] = 0x0d;
+    write(fd, &buf, 2);
+
+            buf[0] = 0x0d;
+    write(fd, &buf, 1);
     time(&started);
 
     do {
@@ -131,8 +169,8 @@ bool cInverter::query(const char *cmd, int replysize) {
 
         lprintf("INVERTER: %s reply size (%d bytes)", cmd, i);
 
-        if (buf[0]!='(' || buf[replysize-1]!=0x0d) {
-            lprintf("INVERTER: %s: incorrect start/stop bytes.  Buffer: %s", cmd, buf);
+        if (buf[0]!='(' || ( buf[replysize-1]!=0x0a && isUdp) || ( buf[replysize-1]!=0x0d && !isUdp)  ) {
+            lprintf("INVERTER: %s: incorrect start/stop bytes.  Buffer: %s %02x", cmd, buf,buf[replysize-1]);
             return false;
         }
         if (!(CheckCRC(buf, replysize))) {
@@ -200,7 +238,7 @@ void cInverter::poll() {
 
 void cInverter::ExecuteCmd(const string cmd) {
     // Sending any command raw
-    if (query(cmd.data(), 7)) {
+    if (query(cmd.data(), 110)) {
         m.lock();
         strcpy(status2, (const char*)buf+1);
         m.unlock();
